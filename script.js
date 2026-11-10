@@ -12,6 +12,8 @@ const emptyState = document.getElementById('empty-state');
 const totalCount = document.getElementById('total-count');
 const activeCount = document.getElementById('active-count');
 const completedCount = document.getElementById('completed-count');
+const progressFill = document.getElementById('progress-fill');
+const progressText = document.getElementById('progress-text');
 const filterBtns = document.querySelectorAll('.filter-btn');
 const clearCompletedBtn = document.getElementById('clear-completed-btn');
 const themeToggleBtn = document.getElementById('theme-toggle');
@@ -155,7 +157,7 @@ function saveTodos() {
   }
 }
 
-// 3. 통계 및 빈 상태 UI 업데이트
+// 3. 통계, 진행률 및 빈 상태 UI 업데이트
 function updateStatsAndEmptyState(filteredTodosCount) {
   const total = todos.length;
   const completed = todos.filter((t) => t.completed).length;
@@ -164,6 +166,16 @@ function updateStatsAndEmptyState(filteredTodosCount) {
   totalCount.textContent = total;
   activeCount.textContent = active;
   completedCount.textContent = completed;
+
+  // 달성률 계산 및 프로그레스 바 업데이트
+  const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+  if (progressFill) progressFill.style.width = `${percentage}%`;
+  if (progressText) {
+    progressText.textContent = `${percentage}%`;
+    if (percentage === 100 && total > 0) {
+      progressText.textContent = `100% 완료! 🏆`;
+    }
+  }
 
   if (total === 0) {
     emptyState.textContent = '등록된 할 일이 없습니다. 새로운 할 일을 추가해보세요!';
