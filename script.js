@@ -4,6 +4,7 @@ const THEME_KEY = 'todo_list_theme';
 
 // DOM 요소 선택
 const todoInput = document.getElementById('todo-input');
+const prioritySelect = document.getElementById('priority-select');
 const addBtn = document.getElementById('add-btn');
 const searchInput = document.getElementById('search-input');
 const todoList = document.getElementById('todo-list');
@@ -53,6 +54,85 @@ function formatDate(timestamp) {
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   return `${month}월 ${day}일 ${hours}:${minutes}`;
+}
+
+// 우선순위 텍스트 및 클래스 반환
+function getPriorityMeta(priority) {
+  switch (priority) {
+    case 'urgent':
+      return { label: '긴급 🚨', className: 'badge-urgent' };
+    case 'high':
+      return { label: '중요 🔥', className: 'badge-high' };
+    case 'medium':
+    default:
+      return { label: '보통', className: 'badge-medium' };
+  }
+}
+
+// --- 완료 축하 폭죽(Confetti) 효과 ---
+function triggerConfetti() {
+  const canvas = document.createElement('canvas');
+  canvas.style.position = 'fixed';
+  canvas.style.top = '0';
+  canvas.style.left = '0';
+  canvas.style.width = '100vw';
+  canvas.style.height = '100vh';
+  canvas.style.pointerEvents = 'none';
+  canvas.style.zIndex = '9999';
+  document.body.appendChild(canvas);
+
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const particles = [];
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+  for (let i = 0; i < 45; i++) {
+    particles.push({
+      x: canvas.width / 2 + (Math.random() - 0.5) * 200,
+      y: canvas.height * 0.35,
+      vx: (Math.random() - 0.5) * 8,
+      vy: Math.random() * -7 - 3,
+      size: Math.random() * 6 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      alpha: 1,
+      rotation: Math.random() * 360,
+      vRotation: (Math.random() - 0.5) * 10,
+    });
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+
+    particles.forEach((p) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.25; // 중력
+      p.rotation += p.vRotation;
+      p.alpha -= 0.015;
+
+      if (p.alpha > 0) {
+        alive = true;
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rotation * Math.PI) / 180);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        ctx.restore();
+      }
+    });
+
+    if (alive) {
+      requestAnimationFrame(animate);
+    } else {
+      canvas.remove();
+    }
+  }
+
+  requestAnimationFrame(animate);
 }
 
 // 1. LocalStorage에서 불러오기
@@ -106,17 +186,12 @@ function updateStatsAndEmptyState(filteredTodosCount) {
 function renderTodos() {
   todoList.innerHTML = '';
 
-  // 필터 및 검색어 적용
   const filteredTodos = todos.filter((todo) => {
-    // 상태 필터링
     if (currentFilter === 'active' && todo.completed) return false;
     if (currentFilter === 'completed' && !todo.completed) return false;
-
-    // 검색어 필터링
     if (searchQuery.trim() !== '') {
       return todo.text.toLowerCase().includes(searchQuery.toLowerCase());
     }
-
     return true;
   });
 
@@ -126,7 +201,7 @@ function renderTodos() {
     li.dataset.id = todo.id;
     li.setAttribute('draggable', 'true');
 
-    // 드래그 앤 드롭 이벤트 등록
+    // 드래그 앤 드롭 이벤트
     li.addEventListener('dragstart', (e) => {
       draggedItemId = todo.id;
       li.classList.add('dragging');
@@ -170,7 +245,7 @@ function renderTodos() {
       }
     });
 
-    // 본문 컨테이너 (체크박스 + 텍스트 & 날짜)
+    // 본문 컨테이너 (체크박스 + 세부내용)
     const content = document.createElement('div');
     content.className = 'todo-content';
 
@@ -182,16 +257,29 @@ function renderTodos() {
     const details = document.createElement('div');
     details.className = 'todo-details';
 
+    // 제목 + 우선순위 배지 줄
+    const titleRow = document.createElement('div');
+    titleRow.className = 'todo-title-row';
+
     const span = document.createElement('span');
     span.className = 'todo-text';
     span.textContent = todo.text;
     span.title = '더블 클릭하여 수정할 수 있습니다';
 
+    const priorityMeta = getPriorityMeta(todo.priority || 'medium');
+    const badge = document.createElement('span');
+    badge.className = `priority-badge ${priorityMeta.className}`;
+    badge.textContent = priorityMeta.label;
+
+    titleRow.appendChild(badge);
+    titleRow.appendChild(span);
+
+    // 등록 일시
     const dateSpan = document.createElement('span');
     dateSpan.className = 'todo-date';
     dateSpan.textContent = todo.createdAt ? formatDate(todo.createdAt) : '';
 
-    details.appendChild(span);
+    details.appendChild(titleRow);
     if (todo.createdAt) {
       details.appendChild(dateSpan);
     }
@@ -224,14 +312,14 @@ function renderTodos() {
     function enterEditMode() {
       if (li.classList.contains('editing')) return;
       li.classList.add('editing');
-      li.setAttribute('draggable', 'false'); // 수정 중에는 드래그 방지
+      li.setAttribute('draggable', 'false');
 
       const editInput = document.createElement('input');
       editInput.type = 'text';
       editInput.className = 'edit-input';
       editInput.value = todo.text;
 
-      details.replaceChild(editInput, span);
+      titleRow.replaceChild(editInput, span);
       editInput.focus();
 
       let isSaved = false;
@@ -304,9 +392,12 @@ function addTodo() {
     return;
   }
 
+  const priority = prioritySelect ? prioritySelect.value : 'medium';
+
   const newTodo = {
     id: Date.now().toString(),
     text: text,
+    priority: priority,
     completed: false,
     createdAt: Date.now(),
   };
@@ -321,14 +412,24 @@ function addTodo() {
 
 // 6. 할 일 완료/미완료 토글
 function toggleTodo(id) {
+  let isNowCompleted = false;
+
   todos = todos.map((todo) => {
     if (todo.id === id) {
-      return { ...todo, completed: !todo.completed };
+      const nextState = !todo.completed;
+      if (nextState) isNowCompleted = true;
+      return { ...todo, completed: nextState };
     }
     return todo;
   });
+
   saveTodos();
   renderTodos();
+
+  // 완료로 전환되었을 때 폭죽 발사!
+  if (isNowCompleted) {
+    triggerConfetti();
+  }
 }
 
 // 7. 할 일 내용 수정
@@ -366,7 +467,7 @@ clearCompletedBtn.addEventListener('click', () => {
   }
 });
 
-// 검색창 입력 이벤트 (실시간 필터링)
+// 검색창 입력 이벤트
 if (searchInput) {
   searchInput.addEventListener('input', (e) => {
     searchQuery = e.target.value;
