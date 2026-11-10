@@ -10,13 +10,33 @@
   <div class="todo-app">
     <header class="app-header">
       <div class="header-top">
-        <h1>오늘의 할 일</h1>
-        <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="테마 전환" title="테마 변경">
-          🌙
-        </button>
+        <div class="today-date-badge">
+          <span class="date-icon">🗓️</span>
+          <span id="current-date-text">2026년 11월 10일 화요일</span>
+        </div>
+        <div class="header-actions">
+          <button id="calendar-toggle-btn" class="icon-btn" type="button" aria-label="월별 달력 보기" title="월별 달력 보기">
+            📅
+          </button>
+          <button id="theme-toggle" class="theme-toggle-btn icon-btn" type="button" aria-label="테마 전환" title="테마 변경">
+            🌙
+          </button>
+        </div>
       </div>
-      <p class="subtitle">간단하고 깔끔한 To Do List</p>
+      <h1>오늘의 할 일</h1>
+      <p class="subtitle">간단하고 스마트한 To Do List</p>
     </header>
+
+    <!-- 3일 날씨 위젯 -->
+    <section class="weather-section" id="weather-section">
+      <div class="weather-header">
+        <span class="weather-title">🌤️ 3일간의 날씨 예보</span>
+        <span class="weather-location" id="weather-location">📍 서울</span>
+      </div>
+      <div class="weather-forecast-grid" id="weather-forecast-grid">
+        <!-- 3일 날씨가 JS로 동적 렌더링됩니다 -->
+      </div>
+    </section>
 
     <div class="input-container">
       <input 
@@ -73,6 +93,39 @@
 
     <div id="empty-state" class="empty-state">
       등록된 할 일이 없습니다. 새로운 할 일을 추가해보세요!
+    </div>
+  </div>
+
+  <!-- 월별 달력 모달 -->
+  <div id="calendar-modal" class="modal-overlay" style="display: none;">
+    <div class="calendar-card">
+      <div class="calendar-header">
+        <button id="prev-month-btn" class="cal-nav-btn" type="button" title="이전 달">&lt;</button>
+        <div class="calendar-title-group">
+          <h2 id="calendar-month-year">2026년 11월</h2>
+          <button id="today-btn" class="today-shortcut-btn" type="button">오늘</button>
+        </div>
+        <button id="next-month-btn" class="cal-nav-btn" type="button" title="다음 달">&gt;</button>
+        <button id="close-calendar-btn" class="modal-close-btn" type="button" title="닫기">&times;</button>
+      </div>
+
+      <div class="calendar-weekdays">
+        <span class="sun">일</span>
+        <span>월</span>
+        <span>화</span>
+        <span>수</span>
+        <span>목</span>
+        <span>금</span>
+        <span class="sat">토</span>
+      </div>
+
+      <div id="calendar-days" class="calendar-days-grid">
+        <!-- 일별 날짜가 JS로 생성됩니다 -->
+      </div>
+
+      <div class="calendar-footer">
+        <span id="selected-date-info" class="selected-date-info">오늘 날짜를 클릭하여 확인할 수 있습니다.</span>
+      </div>
     </div>
   </div>
 

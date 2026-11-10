@@ -3,6 +3,19 @@ const STORAGE_KEY = 'todo_list_items';
 const THEME_KEY = 'todo_list_theme';
 
 // DOM 요소 선택
+const currentDateText = document.getElementById('current-date-text');
+const calendarToggleBtn = document.getElementById('calendar-toggle-btn');
+const calendarModal = document.getElementById('calendar-modal');
+const closeCalendarBtn = document.getElementById('close-calendar-btn');
+const calendarMonthYear = document.getElementById('calendar-month-year');
+const calendarDays = document.getElementById('calendar-days');
+const prevMonthBtn = document.getElementById('prev-month-btn');
+const nextMonthBtn = document.getElementById('next-month-btn');
+const todayBtn = document.getElementById('today-btn');
+const selectedDateInfo = document.getElementById('selected-date-info');
+
+const weatherForecastGrid = document.getElementById('weather-forecast-grid');
+
 const todoInput = document.getElementById('todo-input');
 const prioritySelect = document.getElementById('priority-select');
 const addBtn = document.getElementById('add-btn');
@@ -24,7 +37,237 @@ let currentFilter = 'all';
 let searchQuery = '';
 let draggedItemId = null;
 
-// --- 테마 관리 ---
+// 달력 조회 상태
+const realToday = new Date();
+let currentViewDate = new Date();
+
+// ==========================================
+// 1. 오늘의 날짜 표시
+// ==========================================
+function renderCurrentDate() {
+  const daysOfWeek = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const date = now.getDate();
+  const dayName = daysOfWeek[now.getDay()];
+
+  if (currentDateText) {
+    currentDateText.textContent = `${year}년 ${month}월 ${date}일 ${dayName}`;
+  }
+}
+
+// ==========================================
+// 2. 3일 날씨 예보 기능
+// ==========================================
+// WMO 날씨 코드 해석
+function interpretWeatherCode(code) {
+  if (code === 0) return { icon: '☀️', desc: '맑음' };
+  if (code === 1 || code === 2) return { icon: '🌤️', desc: '대체로 맑음' };
+  if (code === 3) return { icon: '☁️', desc: '흐림' };
+  if (code === 45 || code === 48) return { icon: '🌫️', desc: '안개' };
+  if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return { icon: '🌧️', desc: '비' };
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return { icon: '❄️', desc: '눈' };
+  if ([95, 96, 99].includes(code)) return { icon: '⛈️', desc: '뇌우' };
+  return { icon: '⛅', desc: '구름 조금' };
+}
+
+async function fetchWeatherForecast() {
+  if (!weatherForecastGrid) return;
+
+  const dayLabels = ['오늘', '내일', '모레'];
+
+  // 기본 Fallback 데이터 (네트워크 지연/오류 시 사용)
+  const fallbackForecast = [
+    { label: '오늘', icon: '☀️', desc: '맑음', min: 4, max: 15, dateStr: '오늘' },
+    { label: '내일', icon: '🌤️', desc: '대체로 맑음', min: 5, max: 16, dateStr: '내일' },
+    { label: '모레', icon: '☁️', desc: '구름 많음', min: 6, max: 14, dateStr: '모레' },
+  ];
+
+  try {
+    // 서울 위도/경도 기본값으로 3일치 예보 조회
+    const lat = 37.5665;
+    const lon = 126.9780;
+    const apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4초 타임아웃
+
+    const response = await fetch(apiUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) throw new Error('날씨 API 응답 실패');
+
+    const data = await response.json();
+    const daily = data.daily;
+
+    const forecastList = [];
+    for (let i = 0; i < 3; i++) {
+      const code = daily.weathercode[i];
+      const weather = interpretWeatherCode(code);
+      const maxTemp = Math.round(daily.temperature_2m_max[i]);
+      const minTemp = Math.round(daily.temperature_2m_min[i]);
+      const dateParts = daily.time[i].split('-'); // "2026-11-10"
+      const dateStr = `${parseInt(dateParts[1])}.${parseInt(dateParts[2])}`;
+
+      forecastList.push({
+        label: `${dayLabels[i]} (${dateStr})`,
+        icon: weather.icon,
+        desc: weather.desc,
+        min: minTemp,
+        max: maxTemp,
+        isToday: i === 0,
+      });
+    }
+
+    renderWeatherCards(forecastList);
+  } catch (error) {
+    console.warn('실시간 날씨 로딩 실패, 기본 예보 데이터를 표시합니다:', error);
+    renderWeatherCards(fallbackForecast);
+  }
+}
+
+function renderWeatherCards(forecast) {
+  weatherForecastGrid.innerHTML = '';
+  forecast.forEach((item, index) => {
+    const card = document.createElement('div');
+    card.className = `weather-day-card ${index === 0 ? 'today' : ''}`;
+    card.innerHTML = `
+      <span class="weather-day-label">${item.label}</span>
+      <span class="weather-icon">${item.icon}</span>
+      <span class="weather-desc">${item.desc}</span>
+      <span class="weather-temps">
+        <span class="temp-min">${item.min}°</span> / <span class="temp-max">${item.max}°</span>
+      </span>
+    `;
+    weatherForecastGrid.appendChild(card);
+  });
+}
+
+// ==========================================
+// 3. 월별 달력 (Monthly Calendar) 모달 기능
+// ==========================================
+function renderCalendar(date) {
+  if (!calendarDays || !calendarMonthYear) return;
+
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-indexed
+
+  calendarMonthYear.textContent = `${year}년 ${month + 1}월`;
+
+  // 이번 달 1일의 요일 (0: 일, 1: 월, ...)
+  const firstDayIndex = new Date(year, month, 1).getDay();
+  // 이번 달 마지막 날짜
+  const lastDate = new Date(year, month + 1, 0).getDate();
+  // 지난 달 마지막 날짜
+  const prevLastDate = new Date(year, month, 0).getDate();
+
+  calendarDays.innerHTML = '';
+
+  // 1. 이전 달 잔여 날짜들
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    const day = prevLastDate - i;
+    const cell = document.createElement('div');
+    cell.className = 'calendar-day-cell other-month';
+    cell.textContent = day;
+    calendarDays.appendChild(cell);
+  }
+
+  // 2. 이번 달 날짜들
+  for (let day = 1; day <= lastDate; day++) {
+    const cell = document.createElement('div');
+    cell.className = 'calendar-day-cell';
+    cell.textContent = day;
+
+    const currentDayOfWeek = new Date(year, month, day).getDay();
+    if (currentDayOfWeek === 0) cell.classList.add('sun');
+    if (currentDayOfWeek === 6) cell.classList.add('sat');
+
+    // 오늘 날짜 여부 체크
+    if (
+      year === realToday.getFullYear() &&
+      month === realToday.getMonth() &&
+      day === realToday.getDate()
+    ) {
+      cell.classList.add('is-today');
+      cell.title = '오늘';
+    }
+
+    // 날짜 클릭 이벤트
+    cell.addEventListener('click', () => {
+      document.querySelectorAll('.calendar-day-cell').forEach((c) => c.classList.remove('selected'));
+      cell.classList.add('selected');
+
+      const daysOfWeek = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+      const dayName = daysOfWeek[currentDayOfWeek];
+      selectedDateInfo.textContent = `선택한 날짜: ${year}년 ${month + 1}월 ${day}일 (${dayName})`;
+    });
+
+    calendarDays.appendChild(cell);
+  }
+
+  // 3. 다음 달 채우기 (총 35칸 또는 42칸에 맞추어 깔끔한 그리드 유지)
+  const totalCells = firstDayIndex + lastDate;
+  const nextDays = totalCells <= 35 ? 35 - totalCells : 42 - totalCells;
+
+  for (let j = 1; j <= nextDays; j++) {
+    const cell = document.createElement('div');
+    cell.className = 'calendar-day-cell other-month';
+    cell.textContent = j;
+    calendarDays.appendChild(cell);
+  }
+}
+
+// 달력 열기/닫기 이벤트
+if (calendarToggleBtn) {
+  calendarToggleBtn.addEventListener('click', () => {
+    currentViewDate = new Date();
+    renderCalendar(currentViewDate);
+    selectedDateInfo.textContent = `오늘 날짜를 클릭하여 확인할 수 있습니다.`;
+    calendarModal.style.display = 'flex';
+  });
+}
+
+if (closeCalendarBtn) {
+  closeCalendarBtn.addEventListener('click', () => {
+    calendarModal.style.display = 'none';
+  });
+}
+
+// 모달 바깥 영역 클릭 시 닫기
+if (calendarModal) {
+  calendarModal.addEventListener('click', (e) => {
+    if (e.target === calendarModal) {
+      calendarModal.style.display = 'none';
+    }
+  });
+}
+
+// 이전 달 / 다음 달 / 오늘 이동
+if (prevMonthBtn) {
+  prevMonthBtn.addEventListener('click', () => {
+    currentViewDate.setMonth(currentViewDate.getMonth() - 1);
+    renderCalendar(currentViewDate);
+  });
+}
+
+if (nextMonthBtn) {
+  nextMonthBtn.addEventListener('click', () => {
+    currentViewDate.setMonth(currentViewDate.getMonth() + 1);
+    renderCalendar(currentViewDate);
+  });
+}
+
+if (todayBtn) {
+  todayBtn.addEventListener('click', () => {
+    currentViewDate = new Date();
+    renderCalendar(currentViewDate);
+  });
+}
+
+// ==========================================
+// 4. 테마 관리 (다크 모드)
+// ==========================================
 function initTheme() {
   const savedTheme = localStorage.getItem(THEME_KEY);
   if (savedTheme === 'dark') {
@@ -71,7 +314,7 @@ function getPriorityMeta(priority) {
   }
 }
 
-// --- 완료 축하 폭죽(Confetti) 효과 ---
+// 완료 축하 폭죽(Confetti) 효과
 function triggerConfetti() {
   const canvas = document.createElement('canvas');
   canvas.style.position = 'fixed';
@@ -111,7 +354,7 @@ function triggerConfetti() {
     particles.forEach((p) => {
       p.x += p.vx;
       p.y += p.vy;
-      p.vy += 0.25; // 중력
+      p.vy += 0.25;
       p.rotation += p.vRotation;
       p.alpha -= 0.015;
 
@@ -137,7 +380,7 @@ function triggerConfetti() {
   requestAnimationFrame(animate);
 }
 
-// 1. LocalStorage에서 불러오기
+// 5. LocalStorage 관리
 function loadTodos() {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
@@ -148,7 +391,6 @@ function loadTodos() {
   }
 }
 
-// 2. LocalStorage에 저장하기
 function saveTodos() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
@@ -157,7 +399,7 @@ function saveTodos() {
   }
 }
 
-// 3. 통계, 진행률 및 빈 상태 UI 업데이트
+// 6. 통계, 진행률 및 빈 상태 UI 업데이트
 function updateStatsAndEmptyState(filteredTodosCount) {
   const total = todos.length;
   const completed = todos.filter((t) => t.completed).length;
@@ -167,7 +409,6 @@ function updateStatsAndEmptyState(filteredTodosCount) {
   activeCount.textContent = active;
   completedCount.textContent = completed;
 
-  // 달성률 계산 및 프로그레스 바 업데이트
   const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
   if (progressFill) progressFill.style.width = `${percentage}%`;
   if (progressText) {
@@ -194,7 +435,7 @@ function updateStatsAndEmptyState(filteredTodosCount) {
   }
 }
 
-// 4. 할 일 목록 화면 렌더링
+// 7. 할 일 목록 화면 렌더링
 function renderTodos() {
   todoList.innerHTML = '';
 
@@ -213,7 +454,7 @@ function renderTodos() {
     li.dataset.id = todo.id;
     li.setAttribute('draggable', 'true');
 
-    // 드래그 앤 드롭 이벤트
+    // 드래그 앤 드롭
     li.addEventListener('dragstart', (e) => {
       draggedItemId = todo.id;
       li.classList.add('dragging');
@@ -257,7 +498,7 @@ function renderTodos() {
       }
     });
 
-    // 본문 컨테이너 (체크박스 + 세부내용)
+    // 본문 컨테이너
     const content = document.createElement('div');
     content.className = 'todo-content';
 
@@ -269,7 +510,6 @@ function renderTodos() {
     const details = document.createElement('div');
     details.className = 'todo-details';
 
-    // 제목 + 우선순위 배지 줄
     const titleRow = document.createElement('div');
     titleRow.className = 'todo-title-row';
 
@@ -286,7 +526,6 @@ function renderTodos() {
     titleRow.appendChild(badge);
     titleRow.appendChild(span);
 
-    // 등록 일시
     const dateSpan = document.createElement('span');
     dateSpan.className = 'todo-date';
     dateSpan.textContent = todo.createdAt ? formatDate(todo.createdAt) : '';
@@ -296,17 +535,14 @@ function renderTodos() {
       details.appendChild(dateSpan);
     }
 
-    // 체크박스 클릭
     checkbox.addEventListener('change', () => {
       toggleTodo(todo.id);
     });
 
-    // 텍스트 클릭 시 완료 토글
     span.addEventListener('click', () => {
       toggleTodo(todo.id);
     });
 
-    // 버튼 그룹 (수정 / 삭제)
     const actions = document.createElement('div');
     actions.className = 'todo-actions';
 
@@ -320,7 +556,6 @@ function renderTodos() {
     deleteBtn.textContent = '삭제';
     deleteBtn.type = 'button';
 
-    // 인라인 수정 모드 진입
     function enterEditMode() {
       if (li.classList.contains('editing')) return;
       li.classList.add('editing');
@@ -394,7 +629,7 @@ function renderTodos() {
   updateStatsAndEmptyState(filteredTodos.length);
 }
 
-// 5. 할 일 추가
+// 8. 할 일 추가
 function addTodo() {
   const text = todoInput.value.trim();
 
@@ -422,7 +657,7 @@ function addTodo() {
   todoInput.focus();
 }
 
-// 6. 할 일 완료/미완료 토글
+// 9. 할 일 완료/미완료 토글
 function toggleTodo(id) {
   let isNowCompleted = false;
 
@@ -438,13 +673,12 @@ function toggleTodo(id) {
   saveTodos();
   renderTodos();
 
-  // 완료로 전환되었을 때 폭죽 발사!
   if (isNowCompleted) {
     triggerConfetti();
   }
 }
 
-// 7. 할 일 내용 수정
+// 10. 할 일 내용 수정
 function updateTodoText(id, newText) {
   todos = todos.map((todo) => {
     if (todo.id === id) {
@@ -456,14 +690,14 @@ function updateTodoText(id, newText) {
   renderTodos();
 }
 
-// 8. 할 일 삭제
+// 11. 할 일 삭제
 function deleteTodo(id) {
   todos = todos.filter((todo) => todo.id !== id);
   saveTodos();
   renderTodos();
 }
 
-// 9. 완료된 항목 일괄 삭제
+// 12. 완료된 항목 일괄 삭제
 clearCompletedBtn.addEventListener('click', () => {
   const completedCount = todos.filter((t) => t.completed).length;
 
@@ -506,5 +740,7 @@ filterBtns.forEach((btn) => {
 });
 
 // 초기 실행
+renderCurrentDate();
+fetchWeatherForecast();
 initTheme();
 renderTodos();
