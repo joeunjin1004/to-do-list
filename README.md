@@ -15,3 +15,4 @@
 - **HTML5**
 - **CSS3** (CSS Variables, Flexbox, Responsive Design)
 - **JavaScript (Vanilla JS, ES6+)**
+

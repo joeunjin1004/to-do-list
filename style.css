@@ -110,7 +110,28 @@ body {
 .input-container {
   display: flex;
   gap: 10px;
+  margin-bottom: 12px;
+}
+
+.search-container {
   margin-bottom: 18px;
+}
+
+#search-input {
+  width: 100%;
+  padding: 8px 14px;
+  background: var(--item-bg);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+#search-input:focus {
+  border-color: var(--primary-color);
+  background: var(--app-bg);
 }
 
 #todo-input {
@@ -228,6 +249,22 @@ body {
   border-radius: 10px;
   padding: 12px 14px;
   transition: all 0.2s ease;
+  cursor: grab;
+  user-select: none;
+}
+
+.todo-item:active {
+  cursor: grabbing;
+}
+
+.todo-item.dragging {
+  opacity: 0.4;
+  transform: scale(0.98);
+  border: 1.5px dashed var(--primary-color);
+}
+
+.todo-item.drag-over {
+  border-top: 2.5px solid var(--primary-color);
 }
 
 .todo-item:hover {
